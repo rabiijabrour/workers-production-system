@@ -77,16 +77,8 @@ app.use(compression());
 
 // Database configuration
 const dbPath = process.env.NODE_ENV === 'production'
-    ? path.join('/data', 'production.db')
+    ? ':memory:'  // Use in-memory database for production in free tier
     : path.join(__dirname, 'production.db');
-
-// Ensure database directory exists in production
-if (process.env.NODE_ENV === 'production') {
-    const dbDir = path.dirname(dbPath);
-    if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true });
-    }
-}
 
 // Initialize database with retry mechanism
 function initializeDatabase(retries = 5) {
@@ -118,6 +110,27 @@ function initializeDatabase(retries = 5) {
             )`, (err) => {
                 if (err) logger.error('Error creating users table:', err);
                 else logger.info('Users table checked/created successfully');
+            });
+
+            // Create default admin user if not exists
+            const defaultAdmin = {
+                username: 'admin',
+                password: bcrypt.hashSync('admin123', 10),
+                role: 'admin',
+                fullName: 'مدير النظام',
+                email: 'admin@example.com',
+                status: 'active'
+            };
+
+            db.get('SELECT * FROM users WHERE username = ?', [defaultAdmin.username], (err, row) => {
+                if (!row) {
+                    db.run('INSERT INTO users (username, password, role, fullName, email, status) VALUES (?, ?, ?, ?, ?, ?)',
+                        [defaultAdmin.username, defaultAdmin.password, defaultAdmin.role, defaultAdmin.fullName, defaultAdmin.email, defaultAdmin.status],
+                        (err) => {
+                            if (err) logger.error('Error creating default admin:', err);
+                            else logger.info('Default admin user created successfully');
+                        });
+                }
             });
 
             // Workers table
