@@ -3,11 +3,15 @@ services:
     name: workers-production-system
     env: node
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
         sync: false
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
     healthCheckPath: /
     autoDeploy: true

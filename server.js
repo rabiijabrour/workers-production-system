@@ -12,6 +12,7 @@ const compression = require('compression');
 const { body, validationResult } = require('express-validator');
 const winston = require('winston');
 const moment = require('moment');
+const fs = require('fs');
 
 // Configure Winston logger
 const logger = winston.createLogger({
@@ -74,60 +75,117 @@ app.use(helmet({
 }));
 app.use(compression());
 
-// Database setup
-const dbPath = process.env.NODE_ENV === 'production' 
-    ? path.join(__dirname, 'production.db')
+// Database configuration
+const dbPath = process.env.NODE_ENV === 'production'
+    ? path.join('/data', 'production.db')
     : path.join(__dirname, 'production.db');
-const db = new sqlite3.Database(dbPath);
 
-// Create tables
-db.serialize(() => {
-    // Users table with more fields
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT,
-        fullName TEXT,
-        role TEXT,
-        email TEXT UNIQUE,
-        lastLogin TEXT,
-        status TEXT DEFAULT 'active',
-        createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-    )`);
+// Ensure database directory exists in production
+if (process.env.NODE_ENV === 'production') {
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+    }
+}
 
-    // Workers table
-    db.run(`CREATE TABLE IF NOT EXISTS workers (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        department TEXT
-    )`);
+// Initialize database with retry mechanism
+function initializeDatabase(retries = 5) {
+    try {
+        const db = new sqlite3.Database(dbPath, (err) => {
+            if (err) {
+                logger.error('Error opening database:', err);
+                throw err;
+            }
+            logger.info(`Database initialized successfully at ${dbPath}`);
+        });
 
-    // Production table
-    db.run(`CREATE TABLE IF NOT EXISTS productions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workerId TEXT,
-        pieces INTEGER,
-        date TEXT,
-        FOREIGN KEY(workerId) REFERENCES workers(id)
-    )`);
+        // Enable foreign keys
+        db.run('PRAGMA foreign_keys = ON');
 
-    // Create default admin user if not exists
-    const defaultAdmin = {
-        username: 'admin',
-        password: bcrypt.hashSync('admin123', 10),
-        role: 'admin',
-        fullName: 'مدير النظام',
-        email: 'admin@example.com',
-        status: 'active'
-    };
+        // Create tables with better error handling
+        db.serialize(() => {
+            // Users table
+            db.run(`CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                fullName TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                role TEXT CHECK(role IN ('admin', 'user')) NOT NULL,
+                status TEXT DEFAULT 'active',
+                lastLogin TEXT,
+                createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+            )`, (err) => {
+                if (err) logger.error('Error creating users table:', err);
+                else logger.info('Users table checked/created successfully');
+            });
 
-    db.get('SELECT * FROM users WHERE username = ?', [defaultAdmin.username], (err, row) => {
-        if (!row) {
-            db.run('INSERT INTO users (username, password, role, fullName, email, status) VALUES (?, ?, ?, ?, ?, ?)',
-                [defaultAdmin.username, defaultAdmin.password, defaultAdmin.role, defaultAdmin.fullName, defaultAdmin.email, defaultAdmin.status]);
+            // Workers table
+            db.run(`CREATE TABLE IF NOT EXISTS workers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                status TEXT DEFAULT 'active',
+                createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+            )`, (err) => {
+                if (err) logger.error('Error creating workers table:', err);
+                else logger.info('Workers table checked/created successfully');
+            });
+
+            // Productions table
+            db.run(`CREATE TABLE IF NOT EXISTS productions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workerId INTEGER NOT NULL,
+                pieces INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (workerId) REFERENCES workers(id) ON DELETE CASCADE
+            )`, (err) => {
+                if (err) logger.error('Error creating productions table:', err);
+                else logger.info('Productions table checked/created successfully');
+            });
+        });
+
+        return db;
+    } catch (err) {
+        logger.error('Database initialization error:', err);
+        if (retries > 0) {
+            logger.info(`Retrying database initialization. Attempts remaining: ${retries}`);
+            setTimeout(() => initializeDatabase(retries - 1), 5000);
+        } else {
+            logger.error('Failed to initialize database after all retries');
+            throw err;
+        }
+    }
+}
+
+// Initialize database
+const db = initializeDatabase();
+
+// Periodic database backup (if in production)
+if (process.env.NODE_ENV === 'production') {
+    schedule.scheduleJob('0 */6 * * *', async () => { // Every 6 hours
+        try {
+            const backupPath = path.join('/data', `backup-${moment().format('YYYY-MM-DD-HH')}.db`);
+            await fs.promises.copyFile(dbPath, backupPath);
+            logger.info(`Database backup created at ${backupPath}`);
+            
+            // Keep only last 4 backups
+            const backupFiles = await fs.promises.readdir('/data');
+            const backups = backupFiles
+                .filter(file => file.startsWith('backup-'))
+                .sort()
+                .reverse();
+            
+            for (let i = 4; i < backups.length; i++) {
+                await fs.promises.unlink(path.join('/data', backups[i]));
+                logger.info(`Removed old backup: ${backups[i]}`);
+            }
+        } catch (err) {
+            logger.error('Database backup error:', err);
         }
     });
-});
+}
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
