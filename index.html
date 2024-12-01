@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة إنتاج العمال</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center mb-4">نظام إدارة إنتاج العمال</h1>
+        
+        <!-- التبويبات -->
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="workers-tab" data-bs-toggle="tab" data-bs-target="#workers" type="button">إعداد العمال</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="production-tab" data-bs-toggle="tab" data-bs-target="#production" type="button">تسجيل الإنتاج</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button">ملخص الإنتاج</button>
+            </li>
+        </ul>
+
+        <!-- محتوى التبويبات -->
+        <div class="tab-content" id="myTabContent">
+            <!-- تبويب إعداد العمال -->
+            <div class="tab-pane fade show active" id="workers" role="tabpanel">
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h3 class="card-title">إضافة عامل جديد</h3>
+                        <form id="workerForm" class="row g-3">
+                            <div class="col-md-4">
+                                <label for="workerName" class="form-label">اسم العامل</label>
+                                <input type="text" class="form-control" id="workerName" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="workerId" class="form-label">رقم العامل</label>
+                                <input type="text" class="form-control" id="workerId" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="department" class="form-label">القسم</label>
+                                <select class="form-select" id="department" required>
+                                    <option value="">اختر القسم...</option>
+                                    <option value="انتاج">انتاج</option>
+                                    <option value="تعبئة">تعبئة</option>
+                                    <option value="تغليف">تغليف</option>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">إضافة عامل</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h3 class="card-title">قائمة العمال</h3>
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="workersTable">
+                                <thead>
+                                    <tr>
+                                        <th>الرقم</th>
+                                        <th>الاسم</th>
+                                        <th>القسم</th>
+                                        <th>الإجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب تسجيل الإنتاج -->
+            <div class="tab-pane fade" id="production" role="tabpanel">
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h3 class="card-title">تسجيل الإنتاج</h3>
+                        <form id="productionForm" class="row g-3">
+                            <div class="col-md-6">
+                                <label for="productionWorkerId" class="form-label">اختر العامل</label>
+                                <select class="form-select" id="productionWorkerId" required>
+                                    <option value="">اختر العامل...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="pieces" class="form-label">عدد القطع</label>
+                                <input type="number" class="form-control" id="pieces" min="1" required>
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">تسجيل الإنتاج</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h3 class="card-title">سجل الإنتاج</h3>
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="productionTable">
+                                <thead>
+                                    <tr>
+                                        <th>التاريخ</th>
+                                        <th>اسم العامل</th>
+                                        <th>القسم</th>
+                                        <th>عدد القطع</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب ملخص الإنتاج -->
+            <div class="tab-pane fade" id="summary" role="tabpanel">
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h3 class="card-title">ملخص الإنتاج</h3>
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="summaryTable">
+                                <thead>
+                                    <tr>
+                                        <th>اسم العامل</th>
+                                        <th>القسم</th>
+                                        <th>مجموع الإنتاج</th>
+                                        <th>متوسط الإنتاج</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
