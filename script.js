@@ -2,7 +2,9 @@
 let workers = [];
 let productions = [];
 let token = localStorage.getItem('token');
-const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+const API_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000' 
+    : 'https://workers-production-system.onrender.com';
 
 // التحقق من تسجيل الدخول
 function checkAuth() {
@@ -11,48 +13,62 @@ function checkAuth() {
     }
 }
 
+// معالجة الأخطاء العامة
+async function handleApiError(response) {
+    if (!response.ok) {
+        if (response.status === 401) {
+            localStorage.removeItem('token');
+            window.location.href = '/login.html';
+            return;
+        }
+        const error = await response.json();
+        throw new Error(error.error || 'حدث خطأ في النظام');
+    }
+    return response.json();
+}
+
 // دوال API
 async function fetchWorkers() {
-    const response = await fetch(`${API_URL}/api/workers`, {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-    });
-    if (response.status === 401) {
-        window.location.href = '/login.html';
-        return;
+    try {
+        const response = await fetch(`${API_URL}/api/workers`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        workers = await handleApiError(response);
+        updateWorkersTable();
+        updateProductionWorkerSelect();
+    } catch (error) {
+        showError(error.message);
     }
-    workers = await response.json();
-    updateWorkersTable();
-    updateProductionWorkerSelect();
 }
 
 async function fetchProductions() {
-    const response = await fetch(`${API_URL}/api/productions`, {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-    });
-    if (response.status === 401) {
-        window.location.href = '/login.html';
-        return;
+    try {
+        const response = await fetch(`${API_URL}/api/productions`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        productions = await handleApiError(response);
+        updateProductionTable();
+    } catch (error) {
+        showError(error.message);
     }
-    productions = await response.json();
-    updateProductionTable();
 }
 
 async function fetchSummary() {
-    const response = await fetch(`${API_URL}/api/summary`, {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-    });
-    if (response.status === 401) {
-        window.location.href = '/login.html';
-        return;
+    try {
+        const response = await fetch(`${API_URL}/api/summary`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        const summary = await handleApiError(response);
+        updateSummaryTable(summary);
+    } catch (error) {
+        showError(error.message);
     }
-    const summary = await response.json();
-    updateSummaryTable(summary);
 }
 
 // إدارة العمال
@@ -73,18 +89,12 @@ document.getElementById('workerForm').addEventListener('submit', async function(
             body: JSON.stringify({ id, name, department })
         });
         
-        if (response.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
-        
-        if (!response.ok) throw new Error('Failed to add worker');
+        await handleApiError(response);
         
         this.reset();
         await fetchWorkers();
     } catch (error) {
-        alert('حدث خطأ أثناء إضافة العامل');
-        console.error(error);
+        showError(error.message);
     }
 });
 
@@ -98,19 +108,13 @@ async function deleteWorker(workerId) {
                 }
             });
             
-            if (response.status === 401) {
-                window.location.href = '/login.html';
-                return;
-            }
-            
-            if (!response.ok) throw new Error('Failed to delete worker');
+            await handleApiError(response);
             
             await fetchWorkers();
             await fetchProductions();
             await fetchSummary();
         } catch (error) {
-            alert('حدث خطأ أثناء حذف العامل');
-            console.error(error);
+            showError(error.message);
         }
     }
 }
@@ -132,19 +136,13 @@ document.getElementById('productionForm').addEventListener('submit', async funct
             body: JSON.stringify({ workerId, pieces })
         });
         
-        if (response.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
-        
-        if (!response.ok) throw new Error('Failed to record production');
+        await handleApiError(response);
         
         this.reset();
         await fetchProductions();
         await fetchSummary();
     } catch (error) {
-        alert('حدث خطأ أثناء تسجيل الإنتاج');
-        console.error(error);
+        showError(error.message);
     }
 });
 
@@ -217,6 +215,95 @@ function updateSummaryTable(summary) {
     });
 }
 
+// تحديث لوحة التحكم
+async function updateDashboard() {
+    try {
+        const [workersResponse, productionResponse] = await Promise.all([
+            fetch(`${API_URL}/api/workers`),
+            fetch(`${API_URL}/api/production/summary`)
+        ]);
+
+        const workers = await handleApiError(workersResponse);
+        const production = await handleApiError(productionResponse);
+
+        // تحديث الإحصائيات
+        document.getElementById('totalWorkers').textContent = workers.length;
+        document.getElementById('todayProduction').textContent = production.todayTotal || 0;
+        document.getElementById('avgProduction').textContent = production.average || 0;
+        document.getElementById('bestProduction').textContent = production.best || 0;
+
+        // رسم المخطط البياني للإنتاج
+        const productionCtx = document.getElementById('productionChart').getContext('2d');
+        new Chart(productionCtx, {
+            type: 'line',
+            data: {
+                labels: production.dates,
+                datasets: [{
+                    label: 'الإنتاج اليومي',
+                    data: production.values,
+                    borderColor: '#3498db',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'تحليل الإنتاج اليومي'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // رسم المخطط الدائري لتوزيع العمال
+        const departments = {};
+        workers.forEach(worker => {
+            departments[worker.department] = (departments[worker.department] || 0) + 1;
+        });
+
+        const departmentCtx = document.getElementById('departmentChart').getContext('2d');
+        new Chart(departmentCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(departments),
+                datasets: [{
+                    data: Object.values(departments),
+                    backgroundColor: [
+                        '#2ecc71',
+                        '#3498db',
+                        '#9b59b6',
+                        '#f1c40f'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('خطأ في تحديث لوحة التحكم:', error);
+        showError('حدث خطأ أثناء تحديث لوحة التحكم');
+    }
+}
+
+// تحديث البيانات كل دقيقة
+setInterval(updateDashboard, 60000);
+
 // منبه تسجيل الإنتاج
 function setupProductionReminder() {
     if (Notification.permission !== 'granted') {
@@ -233,11 +320,25 @@ function setupProductionReminder() {
     }, 60 * 60 * 1000); // كل ساعة
 }
 
+// عرض رسائل الخطأ
+function showError(message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+    alertDiv.role = 'alert';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.container').firstChild);
+    setTimeout(() => alertDiv.remove(), 5000);
+}
+
 // تحديث البيانات عند تحميل الصفحة
 document.addEventListener('DOMContentLoaded', async function() {
     checkAuth();
     await fetchWorkers();
     await fetchProductions();
     await fetchSummary();
+    updateDashboard();
     setupProductionReminder();
 });
